@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Check, ClipboardList, Download, FileWarning, PackageSearch, Plus, Repeat2, ShieldAlert, ShoppingCart, X } from 'lucide-react'
 import { PageHeader } from '../components/Layout'
 import { Field, Spinner } from '../components/ui'
@@ -8,7 +8,7 @@ import { useToast } from '../context/ToastContext'
 import { api } from '../lib/api'
 import { HAZARDS, type Chemical, type ChemicalRequest, type ChemicalRequestInput } from '../lib/types'
 import { useLabLocations } from '../lib/useLabLocations'
-import { download, formatDate, formatSize, todayISO } from '../lib/utils'
+import { download, formatDate, formatSize, todayISO, uniqueSorted } from '../lib/utils'
 
 const INCOMPATIBLE: Array<[string, string, string]> = [
   ['Flammable', 'Oxidising', 'Fire risk'],
@@ -60,6 +60,27 @@ export default function OperationsPage() {
     notes: '',
   })
   const [busy, setBusy] = useState(false)
+  const requestFormRef = useRef<HTMLDivElement>(null)
+
+  // What the "chemical name or CAS" field suggests as you type — every
+  // distinct name/CAS already in the inventory, so reordering an existing
+  // reagent is pick-not-retype instead of hoping the free text matches
+  // exactly. Genuinely new reagents (not in inventory yet) still just get
+  // typed in; the datalist only ever suggests, never restricts.
+  const knownReagents = useMemo(() => {
+    const byKey = new Map<string, Chemical>()
+    for (const c of chemicals) {
+      if (c.name && !byKey.has(c.name)) byKey.set(c.name, c)
+      if (c.cas && !byKey.has(c.cas)) byKey.set(c.cas, c)
+    }
+    return byKey
+  }, [chemicals])
+  const reagentSuggestions = useMemo(() => uniqueSorted([...knownReagents.keys()]), [knownReagents])
+
+  function startRequest(defaults: Partial<ChemicalRequestInput>) {
+    setRequestForm((f) => ({ ...f, ...defaults }))
+    requestFormRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   async function loadRequests() {
     try {
@@ -273,10 +294,30 @@ export default function OperationsPage() {
 
       <div className="grid gap-4 xl:grid-cols-2">
         {canEdit && (
+          <div ref={requestFormRef}>
           <Card title="Request chemical" icon={<Plus className="h-4 w-4" />}>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Chemical name or CAS" required>
-                <input className="input" value={requestForm.chemical_name_or_cas} onChange={(e) => setRequestForm((f) => ({ ...f, chemical_name_or_cas: e.target.value }))} placeholder="acetone, 67-64-1..." />
+              <Field label="Chemical name or CAS" required hint="Pick an existing reagent to reorder it, or type a new one.">
+                <input
+                  className="input"
+                  list="reagent-suggestions"
+                  value={requestForm.chemical_name_or_cas}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    const match = knownReagents.get(value)
+                    setRequestForm((f) => ({
+                      ...f,
+                      chemical_name_or_cas: value,
+                      supplier: !f.supplier && match?.supplier ? match.supplier : f.supplier,
+                    }))
+                  }}
+                  placeholder="Start typing to see existing reagents, or enter something new..."
+                />
+                <datalist id="reagent-suggestions">
+                  {reagentSuggestions.map((option) => (
+                    <option key={option} value={option} />
+                  ))}
+                </datalist>
               </Field>
               <Field label="Quantity">
                 <input className="input" value={requestForm.quantity ?? ''} onChange={(e) => setRequestForm((f) => ({ ...f, quantity: e.target.value }))} placeholder="2 x 2.5 L" />
@@ -297,6 +338,7 @@ export default function OperationsPage() {
               </button>
             </div>
           </Card>
+          </div>
         )}
         <Card title={isAdmin ? 'Pending approvals' : 'My requests'} icon={<ClipboardList className="h-4 w-4" />}>
           <RequestList
@@ -342,7 +384,34 @@ export default function OperationsPage() {
           )}
         </Card>
         <Card title="Low stock / reorder list" icon={<PackageSearch className="h-4 w-4" />}>
-          {table(data.reorder, (c) => `${formatSize(c)} - ${c.supplier ?? 'no supplier'} - ${c.reorder_priority}`)}
+          {data.reorder.length === 0 ? (
+            <p className="text-sm text-ink-500">Nothing needs attention here.</p>
+          ) : (
+            <div className="max-h-80 space-y-2 overflow-auto">
+              {data.reorder.slice(0, 30).map((c) => (
+                <div key={c.id} className="flex items-center justify-between gap-3 rounded-lg border border-ink-200 p-2.5 dark:border-ink-800">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium text-ink-900 dark:text-ink-50">{c.name}</p>
+                    <p className="text-xs text-ink-500">{formatSize(c)} - {c.supplier ?? 'no supplier'} - {c.reorder_priority}</p>
+                  </div>
+                  {canEdit && (
+                    <button
+                      className="btn-secondary shrink-0 py-1.5 text-xs"
+                      onClick={() =>
+                        startRequest({
+                          chemical_name_or_cas: c.name,
+                          supplier: c.supplier ?? '',
+                          notes: `Reorder — was ${formatSize(c)} at ${c.location ?? 'unassigned'}.`,
+                        })
+                      }
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Request
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
         <Card title="Expiry and opened-date alerts" icon={<AlertTriangle className="h-4 w-4" />}>
           {table([...data.expiring, ...data.openedLong], (c) =>
