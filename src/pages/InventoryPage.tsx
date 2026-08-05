@@ -38,6 +38,7 @@ import {
   type ChemicalInput,
 } from '../lib/types'
 import { structureMatches } from '../lib/structureSearch'
+import * as pubchem from '../lib/pubchem'
 import {
   cx,
   download,
@@ -57,18 +58,19 @@ function ChemicalThumbnail({ chemical }: { chemical: Chemical }) {
   useEffect(() => setImageOk(true), [chemical.cas, chemical.name])
 
   return (
-    <div className="viz-root flex h-10 w-14 items-center justify-center overflow-hidden rounded bg-white ring-1 ring-ink-200 dark:ring-ink-700">
+    <div className="viz-root flex h-16 w-24 items-center justify-center overflow-hidden rounded bg-white ring-1 ring-ink-200 dark:ring-ink-700">
       {chemical.structure_molfile ? (
         <Suspense fallback={null}>
-          <LazyMolfileSvgRenderer molfile={chemical.structure_molfile} width={56} height={40} />
+          <LazyMolfileSvgRenderer molfile={chemical.structure_molfile} width={92} height={62} />
         </Suspense>
       ) : imageOk ? (
         <PubChemStructureImage
           cas={chemical.cas}
           name={chemical.name}
-          size="small"
+          cid={chemical.pubchem_cid}
+          size="large"
           alt=""
-          className="max-h-10 max-w-14 object-contain dark:brightness-95 dark:invert-[.92] dark:hue-rotate-180"
+          className="max-h-16 max-w-24 object-contain dark:brightness-95 dark:invert-[.92] dark:hue-rotate-180"
           onExhausted={() => setImageOk(false)}
         />
       ) : (
@@ -106,11 +108,14 @@ export default function InventoryPage() {
   const [structureMatchIds, setStructureMatchIds] = useState<Set<string> | null>(null)
   const [structureSearching, setStructureSearching] = useState(false)
 
-  // structureMatches loads openchemlib's ~1MB chemistry data on first call —
-  // never on page load, only once someone actually draws a structure to
-  // search by. Run once per query/mode change here, not per keystroke inside
-  // the filter, so the heavy per-molecule comparison isn't repeated on every
-  // unrelated filter/sort change.
+  // Two structure sources feed a search: rows with a hand-drawn
+  // structure_molfile (compared locally via openchemlib — loads its ~1MB
+  // chemistry data on first call, never on page load) and everything else,
+  // which was bulk-imported and only ever got a name/CAS. For the second
+  // group we ask PubChem to run the actual substructure search and match its
+  // CID hits against each row's cached pubchem_cid, instead of silently
+  // treating "no molfile" as "no match" — otherwise structure search would
+  // return nothing for virtually the whole imported inventory.
   useEffect(() => {
     if (!structureQuery) {
       setStructureMatchIds(null)
@@ -119,21 +124,36 @@ export default function InventoryPage() {
     let cancelled = false
     setStructureSearching(true)
     ;(async () => {
-      const ids = new Set<string>()
-      for (const c of chemicals) {
-        if (await structureMatches(structureQuery.molfile, c.structure_molfile, structureMode)) {
-          ids.add(c.id)
+      const [localIds, pubchemCids] = await Promise.all([
+        (async () => {
+          const ids = new Set<string>()
+          for (const c of chemicals) {
+            if (c.structure_molfile && (await structureMatches(structureQuery.molfile, c.structure_molfile, structureMode))) {
+              ids.add(c.id)
+            }
+          }
+          return ids
+        })(),
+        structureMode === 'exact'
+          ? pubchem.exactSearchCids(structureQuery.smiles)
+          : pubchem.substructureSearchCids(structureQuery.smiles),
+      ])
+      if (cancelled) return
+      const ids = new Set(localIds)
+      if (pubchemCids) {
+        for (const c of chemicals) {
+          if (c.pubchem_cid && pubchemCids.has(c.pubchem_cid)) ids.add(c.id)
         }
+      } else {
+        toast.error('Could not reach PubChem for structure search — showing matches from locally drawn structures only.')
       }
-      if (!cancelled) {
-        setStructureMatchIds(ids)
-        setStructureSearching(false)
-      }
+      setStructureMatchIds(ids)
+      setStructureSearching(false)
     })()
     return () => {
       cancelled = true
     }
-  }, [structureQuery, structureMode, chemicals])
+  }, [structureQuery, structureMode, chemicals, toast])
 
   // Deep link from a scanned QR sticker: ?code=ChibaLab-0042 opens that record.
   useEffect(() => {

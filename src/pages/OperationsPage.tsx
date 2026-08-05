@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { AlertTriangle, Check, ClipboardList, Download, FileWarning, PackageSearch, Plus, Repeat2, ShieldAlert, X } from 'lucide-react'
+import { AlertTriangle, Check, ClipboardList, Download, FileWarning, PackageSearch, Plus, Repeat2, ShieldAlert, ShoppingCart, X } from 'lucide-react'
 import { PageHeader } from '../components/Layout'
 import { Field, Spinner } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
@@ -21,12 +21,25 @@ function active(c: Chemical) {
   return c.status !== 'empty' && c.status !== 'disposed'
 }
 
-function Card({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
+function Card({
+  title,
+  icon,
+  actions,
+  children,
+}: {
+  title: string
+  icon: React.ReactNode
+  actions?: React.ReactNode
+  children: React.ReactNode
+}) {
   return (
     <section className="card overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-ink-200 bg-ink-50 px-4 py-2.5 dark:border-ink-800 dark:bg-ink-950/50">
-        <span className="text-pearl-600">{icon}</span>
-        <h2 className="text-sm font-semibold text-ink-800 dark:text-ink-100">{title}</h2>
+      <div className="flex items-center justify-between gap-2 border-b border-ink-200 bg-ink-50 px-4 py-2.5 dark:border-ink-800 dark:bg-ink-950/50">
+        <div className="flex items-center gap-2">
+          <span className="text-pearl-600">{icon}</span>
+          <h2 className="text-sm font-semibold text-ink-800 dark:text-ink-100">{title}</h2>
+        </div>
+        {actions}
       </div>
       <div className="p-4">{children}</div>
     </section>
@@ -134,6 +147,7 @@ export default function OperationsPage() {
 
   const pendingRequests = requests.filter((request) => request.status === 'pending')
   const myRequests = profile ? requests.filter((request) => request.requested_by === profile.id) : []
+  const purchaseList = requests.filter((request) => request.status === 'approved')
 
   async function submitRequest() {
     if (!profile || !canEdit) return
@@ -169,6 +183,25 @@ export default function OperationsPage() {
     } finally {
       setBusy(false)
     }
+  }
+
+  function exportPurchaseList() {
+    if (purchaseList.length === 0) return toast.error('Nothing approved for purchase yet.')
+    const rows = purchaseList.map((r) => ({
+      Chemical: r.chemical_name_or_cas,
+      Quantity: r.quantity ?? '',
+      Supplier: r.supplier ?? '',
+      'Project / justification': r.justification_project ?? '',
+      'Requested by': r.requested_by_name ?? '',
+      'Approved by': r.decided_by_name ?? '',
+      Notes: r.notes ?? '',
+    }))
+    const csv = [
+      Object.keys(rows[0]).join(','),
+      ...rows.map((r) => Object.values(r).map((v) => `"${String(v).replace(/"/g, '""')}"`).join(',')),
+    ].join('\n')
+    download(`chibalab-purchase-list-${todayISO()}.csv`, csv, 'text/csv;charset=utf-8')
+    toast.success(`Exported ${rows.length} item${rows.length === 1 ? '' : 's'} to purchase.`)
   }
 
   function exportAudit() {
@@ -273,6 +306,40 @@ export default function OperationsPage() {
             busy={busy}
             onStatus={(row, status, receivedId) => void setRequestStatus(row, status, receivedId)}
           />
+        </Card>
+        <Card
+          title="Purchase list"
+          icon={<ShoppingCart className="h-4 w-4" />}
+          actions={
+            <button className="btn-secondary py-1.5 text-xs" onClick={exportPurchaseList}>
+              <Download className="h-3.5 w-3.5" /> Export CSV
+            </button>
+          }
+        >
+          {purchaseList.length === 0 ? (
+            <p className="text-sm text-ink-500">Nothing approved for purchase right now — approve a request above to add it here.</p>
+          ) : (
+            <div className="max-h-96 space-y-2 overflow-auto">
+              {purchaseList.map((row) => (
+                <div key={row.id} className="rounded-lg border border-ink-200 p-3 dark:border-ink-800">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div className="min-w-0">
+                      <p className="font-semibold text-ink-900 dark:text-ink-50">{row.chemical_name_or_cas}</p>
+                      <p className="mt-1 text-xs text-ink-500">
+                        {row.quantity || 'quantity not specified'} - {row.supplier || 'supplier not specified'} - requested by {row.requested_by_name ?? 'unknown'}
+                      </p>
+                      {row.notes && <p className="mt-1 text-xs text-ink-500">{row.notes}</p>}
+                    </div>
+                    {isAdmin && (
+                      <button className="btn-primary shrink-0 py-1.5 text-xs" onClick={() => void setRequestStatus(row, 'received')} disabled={busy}>
+                        <Check className="h-3.5 w-3.5" /> Mark received
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
         <Card title="Low stock / reorder list" icon={<PackageSearch className="h-4 w-4" />}>
           {table(data.reorder, (c) => `${formatSize(c)} - ${c.supplier ?? 'no supplier'} - ${c.reorder_priority}`)}
