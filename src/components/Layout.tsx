@@ -6,9 +6,7 @@ import {
   LogOut,
   Menu,
   MessageSquare,
-  Minus,
   Moon,
-  Plus,
   Settings,
   ShieldCheck,
   Sun,
@@ -23,24 +21,6 @@ import { AskChibaLab } from './AskChibaLab'
 import { CommandPalette } from './CommandPalette'
 import { NtuBadge, Wordmark } from './Logo'
 import { NotificationBell } from './NotificationBell'
-
-type SidebarWidth = 'compact' | 'comfortable' | 'wide'
-
-const SIDEBAR_WIDTH_STORAGE_KEY = 'pearl.sidebar_width'
-const SIDEBAR_WIDTHS: Record<SidebarWidth, string> = {
-  compact: 'w-60',
-  comfortable: 'w-72',
-  wide: 'w-80',
-}
-
-function storedSidebarWidth(): SidebarWidth {
-  try {
-    const value = localStorage.getItem(SIDEBAR_WIDTH_STORAGE_KEY)
-    return value === 'compact' || value === 'wide' ? value : 'comfortable'
-  } catch {
-    return 'comfortable'
-  }
-}
 
 function useTheme() {
   const [dark, setDark] = useState(() => document.documentElement.classList.contains('dark'))
@@ -66,54 +46,6 @@ export function ThemeToggle() {
     >
       {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
     </button>
-  )
-}
-
-function SidebarWidthControl({
-  value,
-  onChange,
-}: {
-  value: SidebarWidth
-  onChange: (value: SidebarWidth) => void
-}) {
-  const widths: SidebarWidth[] = ['compact', 'comfortable', 'wide']
-  const index = widths.indexOf(value)
-
-  function setWidth(next: SidebarWidth) {
-    try {
-      localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, next)
-    } catch {
-      /* preference still changes for this view */
-    }
-    onChange(next)
-  }
-
-  return (
-    <div className="hidden items-center gap-1 rounded-lg border border-ink-200 bg-white p-1 lg:flex dark:border-ink-800 dark:bg-ink-900">
-      <button
-        type="button"
-        className="btn-ghost p-1.5"
-        onClick={() => setWidth(widths[Math.max(0, index - 1)])}
-        disabled={index === 0}
-        title="Narrower sidebar"
-        aria-label="Narrower sidebar"
-      >
-        <Minus className="h-3.5 w-3.5" />
-      </button>
-      <span className="w-16 text-center text-[11px] font-medium capitalize text-ink-500">
-        {value}
-      </span>
-      <button
-        type="button"
-        className="btn-ghost p-1.5"
-        onClick={() => setWidth(widths[Math.min(widths.length - 1, index + 1)])}
-        disabled={index === widths.length - 1}
-        title="Wider sidebar"
-        aria-label="Wider sidebar"
-      >
-        <Plus className="h-3.5 w-3.5" />
-      </button>
-    </div>
   )
 }
 
@@ -302,7 +234,6 @@ export function DemoBanner() {
 
 export function AppShell({ children }: { children?: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [sidebarWidth, setSidebarWidth] = useState<SidebarWidth>(() => storedSidebarWidth())
   const [paletteOpen, setPaletteOpen] = useState(false)
   const navigate = useNavigate()
 
@@ -352,12 +283,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
   return (
     <div className="flex h-full">
       {/* Desktop sidebar */}
-      <aside
-        className={cx(
-          'app-chrome no-print hidden shrink-0 flex-col border-r border-ink-200 transition-[width] lg:flex dark:border-ink-800',
-          SIDEBAR_WIDTHS[sidebarWidth],
-        )}
-      >
+      <aside className="app-chrome no-print hidden w-72 shrink-0 flex-col border-r border-ink-200 lg:flex dark:border-ink-800">
         <SidebarContent />
       </aside>
 
@@ -386,7 +312,6 @@ export function AppShell({ children }: { children?: ReactNode }) {
           <div className="lg:hidden">
             <Wordmark compact />
           </div>
-          <SidebarWidthControl value={sidebarWidth} onChange={setSidebarWidth} />
           <div className="flex-1" />
           <button
             type="button"
