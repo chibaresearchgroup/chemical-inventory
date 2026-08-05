@@ -67,7 +67,7 @@ function methodsContext(project: string, chemicals: Record<string, unknown>[], a
 }
 
 async function callModel(prompt: string): Promise<string> {
-  const provider = (Deno.env.get('ASK_ChibaLab_PROVIDER') ?? '').toLowerCase()
+  const provider = (Deno.env.get('ASK_CHIBALAB_PROVIDER') ?? '').toLowerCase()
   const geminiKey = Deno.env.get('GEMINI_API_KEY')
   const openRouterKey = Deno.env.get('OPENROUTER_API_KEY')
   const anthropicKey = Deno.env.get('ANTHROPIC_API_KEY')
@@ -76,7 +76,7 @@ async function callModel(prompt: string): Promise<string> {
 
   if (selected === 'gemini') {
     if (!geminiKey) throw new Error('GEMINI_API_KEY is not configured')
-    const model = Deno.env.get('ASK_ChibaLab_MODEL') ?? Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.5-flash'
+    const model = Deno.env.get('ASK_CHIBALAB_MODEL') ?? Deno.env.get('GEMINI_MODEL') ?? 'gemini-3.5-flash'
     const upstream = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`,
       {
@@ -110,7 +110,7 @@ async function callModel(prompt: string): Promise<string> {
 
   if (selected === 'openrouter') {
     if (!openRouterKey) throw new Error('OPENROUTER_API_KEY is not configured')
-    const model = Deno.env.get('ASK_ChibaLab_MODEL') ?? Deno.env.get('OPENROUTER_MODEL') ?? 'openrouter/free'
+    const model = Deno.env.get('ASK_CHIBALAB_MODEL') ?? Deno.env.get('OPENROUTER_MODEL') ?? 'openrouter/free'
     const upstream = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -137,8 +137,8 @@ async function callModel(prompt: string): Promise<string> {
 
   if (selected === 'anthropic') {
     if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY is not configured')
-    const model = Deno.env.get('ASK_ChibaLab_MODEL') ?? Deno.env.get('ANTHROPIC_MODEL')
-    if (!model) throw new Error('ASK_ChibaLab_MODEL or ANTHROPIC_MODEL is not configured')
+    const model = Deno.env.get('ASK_CHIBALAB_MODEL') ?? Deno.env.get('ANTHROPIC_MODEL')
+    if (!model) throw new Error('ASK_CHIBALAB_MODEL or ANTHROPIC_MODEL is not configured')
     const upstream = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -166,9 +166,9 @@ async function callModel(prompt: string): Promise<string> {
   }
 
   if (selected === 'ollama' || selected === 'local') {
-    const baseUrl = Deno.env.get('ASK_ChibaLab_BASE_URL') ?? Deno.env.get('OLLAMA_BASE_URL')
-    if (!baseUrl) throw new Error('ASK_ChibaLab_BASE_URL or OLLAMA_BASE_URL is not configured')
-    const model = Deno.env.get('ASK_ChibaLab_MODEL') ?? Deno.env.get('OLLAMA_MODEL') ?? 'qwen2.5:7b-instruct'
+    const baseUrl = Deno.env.get('ASK_CHIBALAB_BASE_URL') ?? Deno.env.get('OLLAMA_BASE_URL')
+    if (!baseUrl) throw new Error('ASK_CHIBALAB_BASE_URL or OLLAMA_BASE_URL is not configured')
+    const model = Deno.env.get('ASK_CHIBALAB_MODEL') ?? Deno.env.get('OLLAMA_MODEL') ?? 'qwen2.5:7b-instruct'
     const upstream = await fetch(`${baseUrl.replace(/\/$/, '')}/api/generate`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -184,7 +184,7 @@ async function callModel(prompt: string): Promise<string> {
     return String(result?.response ?? '').trim() || 'No answer was returned.'
   }
 
-  throw new Error('Configure ASK_ChibaLab_PROVIDER plus a matching server-side API key secret')
+  throw new Error('Configure ASK_CHIBALAB_PROVIDER plus a matching server-side API key secret')
 }
 
 Deno.serve(async (req) => {
