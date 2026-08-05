@@ -1,0 +1,288 @@
+import { useEffect, useMemo, useState } from 'react'
+import { BarList, Timeline } from '../components/charts'
+import { PageHeader } from '../components/Layout'
+import { LoadingScreen } from '../components/ui'
+import { useInventory } from '../context/InventoryContext'
+import { useToast } from '../context/ToastContext'
+import { api } from '../lib/api'
+import type { Chemical, ChemicalRequest } from '../lib/types'
+import { trimNumber } from '../lib/utils'
+
+function tally(rows: Chemical[], get: (c: Chemical) => string | null, limit = 10) {
+  const map = new Map<string, number>()
+  for (const r of rows) {
+    const key = get(r)
+    if (!key) continue
+    map.set(key, (map.get(key) ?? 0) + 1)
+  }
+  return [...map.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([label, value]) => ({ label, value }))
+}
+
+/** Sums pack sizes per unit, folding kg→g and L→mL so totals are comparable. */
+function totalsByUnit(rows: Chemical[]) {
+  let g = 0
+  let ml = 0
+  let other = 0
+
+  for (const r of rows) {
+    if (r.size_value == null) continue
+    const amount = r.size_value * (r.quantity || 1)
+    switch (r.size_unit) {
+      case 'kg':
+        g += amount * 1000
+        break
+      case 'g':
+        g += amount
+        break
+      case 'mg':
+        g += amount / 1000
+        break
+      case 'L':
+        ml += amount * 1000
+        break
+      case 'mL':
+        ml += amount
+        break
+      case 'µL':
+        ml += amount / 1000
+        break
+      default:
+        other += amount
+    }
+  }
+  return { grams: g, millilitres: ml, other }
+}
+
+/** Headline totals get one decimal — the source pack sizes are not precise
+ *  enough to justify more, and four decimals just looks like noise. */
+function humanAmount(value: number, small: string, big: string): string {
+  return value >= 1000 ? `${(value / 1000).toFixed(1)} ${big}` : `${trimNumber(Math.round(value))} ${small}`
+}
+
+export default function AnalyticsPage() {
+  const { chemicals, loading } = useInventory()
+  const toast = useToast()
+  const [requests, setRequests] = useState<ChemicalRequest[]>([])
+
+  useEffect(() => {
+    api.listChemicalRequests()
+      .then(setRequests)
+      .catch((err) => {
+        if (!/Could not load chemical requests/i.test(err instanceof Error ? err.message : String(err))) {
+          toast.error(err instanceof Error ? err.message : 'Could not load request analytics.')
+        }
+      })
+  }, [toast])
+
+  const data = useMemo(() => {
+    const inStock = chemicals.filter((c) => c.status === 'active' || c.status === 'low')
+    const totals = totalsByUnit(inStock)
+
+    const byMonth = new Map<string, number>()
+    for (const c of chemicals) {
+      if (!c.registration_date) continue
+      const k = c.registration_date.slice(0, 7)
+      byMonth.set(k, (byMonth.get(k) ?? 0) + 1)
+    }
+
+    const requestNames = new Set(requests.map((request) => request.chemical_name_or_cas.toLowerCase().trim()).filter(Boolean))
+    const duplicateGroups = [...new Map(inStock.map((c) => [c.cas || c.name.toLowerCase(), inStock.filter((x) => (x.cas || x.name.toLowerCase()) === (c.cas || c.name.toLowerCase()))])).values()]
+      .filter((rows) => rows.length > 1)
+    const underuse = duplicateGroups
+      .map((rows) => ({
+        label: rows[0].cas || rows[0].name,
+        count: rows.reduce((sum, row) => sum + row.quantity, 0),
+        locations: new Set(rows.map((row) => row.location ?? 'Unassigned')).size,
+        requested: requestNames.has(rows[0].cas?.toLowerCase() ?? '') || requestNames.has(rows[0].name.toLowerCase()),
+      }))
+      .filter((group) => group.count >= 3 && group.locations >= 2 && !group.requested)
+      .slice(0, 8)
+
+    return {
+      inStock,
+      totals,
+      suppliers: tally(inStock, (c) => c.supplier, 12),
+      systems: tally(inStock, (c) => c.system, 6),
+      owners: tally(inStock, (c) => c.owner, 8),
+      projects: tally(inStock, (c) => c.project, 8),
+      units: tally(inStock, (c) => c.size_unit, 8),
+      hazards: (() => {
+        const map = new Map<string, number>()
+        for (const c of inStock) for (const h of c.hazards) map.set(h, (map.get(h) ?? 0) + 1)
+        return [...map.entries()]
+          .sort((a, b) => b[1] - a[1])
+          .map(([label, value]) => ({ label, value }))
+      })(),
+      timeline: [...byMonth.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([k, value]) => ({
+          label: new Date(k + '-01T00:00:00').toLocaleDateString('en-SG', {
+            month: 'short',
+            year: '2-digit',
+          }),
+          value,
+        })),
+      underuse,
+      wasteMonthly: (() => {
+        const map = new Map<string, number>()
+        for (const c of chemicals) {
+          if (!c.disposal_date && c.status !== 'disposed') continue
+          const k = (c.disposal_date || c.updated_at.slice(0, 10)).slice(0, 7)
+          map.set(k, (map.get(k) ?? 0) + Math.max(1, c.quantity || 1))
+        }
+        return [...map.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([k, value]) => ({
+          label: new Date(k + '-01T00:00:00').toLocaleDateString('en-SG', { month: 'short', year: '2-digit' }),
+          value,
+        }))
+      })(),
+      wasteClasses: tally(chemicals.filter((c) => c.disposal_date || c.status === 'disposed'), (c) => c.disposal_waste_class ?? 'Unclassified', 10),
+      wasteReasons: tally(chemicals.filter((c) => c.disposal_date || c.status === 'disposed'), (c) => c.disposal_reason ?? 'Not recorded', 10),
+      wasteHazards: (() => {
+        const map = new Map<string, number>()
+        for (const c of chemicals.filter((row) => row.disposal_date || row.status === 'disposed')) {
+          const labels = c.hazards.length ? c.hazards : ['Untagged']
+          for (const h of labels) map.set(h, (map.get(h) ?? 0) + Math.max(1, c.quantity || 1))
+        }
+        return [...map.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10).map(([label, value]) => ({ label, value }))
+      })(),
+    }
+  }, [chemicals, requests])
+
+  if (loading) return <LoadingScreen label="Crunching the numbers…" />
+
+  return (
+    <>
+      <PageHeader
+        title="Analytics"
+        description="Where the group's reagents come from, who holds them, and how much is on the shelf."
+      />
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="card p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Solids on hand</p>
+          <p className="mt-1 text-2xl font-bold text-ink-900 dark:text-ink-50">
+            {humanAmount(data.totals.grams, 'g', 'kg')}
+          </p>
+          <p className="text-xs text-ink-400">summed across every in-stock container</p>
+        </div>
+        <div className="card p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-500">Liquids on hand</p>
+          <p className="mt-1 text-2xl font-bold text-ink-900 dark:text-ink-50">
+            {humanAmount(data.totals.millilitres, 'mL', 'L')}
+          </p>
+          <p className="text-xs text-ink-400">volumetric units, normalised</p>
+        </div>
+        <div className="card p-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-ink-500">
+            Distinct compounds
+          </p>
+          <p className="mt-1 text-2xl font-bold text-ink-900 dark:text-ink-50">
+            {new Set(data.inStock.map((c) => c.cas || c.name.toLowerCase())).size}
+          </p>
+          <p className="text-xs text-ink-400">by CAS number where recorded</p>
+        </div>
+      </div>
+
+      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+        <section className="card p-4">
+          <h2 className="mb-4 text-sm font-semibold text-ink-800 dark:text-ink-100">
+            Top suppliers
+          </h2>
+          <BarList data={data.suppliers} />
+        </section>
+
+        <section className="card p-4">
+          <h2 className="mb-4 text-sm font-semibold text-ink-800 dark:text-ink-100">
+            Who holds what
+          </h2>
+          <BarList data={data.owners} emptyLabel="No owners recorded" />
+        </section>
+
+        <section className="card p-4">
+          <h2 className="mb-4 text-sm font-semibold text-ink-800 dark:text-ink-100">
+            Purchasing route
+          </h2>
+          <BarList data={data.systems} emptyLabel="No purchasing systems recorded" />
+        </section>
+
+        <section className="card p-4">
+          <h2 className="mb-4 text-sm font-semibold text-ink-800 dark:text-ink-100">
+            Hazard classes on the shelf
+          </h2>
+          <BarList
+            data={data.hazards}
+            emptyLabel="No hazard tags yet — add them from a chemical's edit form to power the segregation checks."
+          />
+        </section>
+
+        <section className="card p-4">
+          <h2 className="mb-4 text-sm font-semibold text-ink-800 dark:text-ink-100">
+            Projects drawing on the store
+          </h2>
+          <BarList data={data.projects} emptyLabel="No projects recorded" />
+        </section>
+
+        <section className="card p-4">
+          <h2 className="mb-4 text-sm font-semibold text-ink-800 dark:text-ink-100">
+            Pack-size units
+          </h2>
+          <BarList data={data.units} />
+        </section>
+      </div>
+
+      <section className="card mt-4 p-4">
+        <h2 className="mb-3 text-sm font-semibold text-ink-800 dark:text-ink-100">
+          Registrations per month
+        </h2>
+        <Timeline points={data.timeline} height={200} />
+      </section>
+
+      <section className="card mt-4 p-4">
+        <h2 className="mb-3 text-sm font-semibold text-ink-800 dark:text-ink-100">
+          Usage / duplication intelligence
+        </h2>
+        {data.underuse.length ? (
+          <div className="grid gap-2 md:grid-cols-2">
+            {data.underuse.map((group) => (
+              <div key={group.label} className="rounded-lg border border-amber-200 bg-amber-50 p-3 dark:border-amber-500/30 dark:bg-amber-500/10">
+                <p className="text-sm font-semibold text-amber-900 dark:text-amber-100">{group.label}</p>
+                <p className="mt-1 text-xs text-amber-800/80 dark:text-amber-200/75">
+                  {group.count} containers across {group.locations} locations, with no matching recent request.
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-ink-500">No obvious duplicated stockpile signals from current inventory and request data.</p>
+        )}
+      </section>
+
+      <section className="card mt-4 p-4">
+        <h2 className="mb-3 text-sm font-semibold text-ink-800 dark:text-ink-100">
+          Sustainability / waste dashboard
+        </h2>
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-400">Disposals over time</h3>
+            <Timeline points={data.wasteMonthly} height={180} valueLabel="disposed" />
+          </div>
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-400">Waste class</h3>
+            <BarList data={data.wasteClasses} emptyLabel="No disposal classes recorded yet" />
+          </div>
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-400">Disposal reason</h3>
+            <BarList data={data.wasteReasons} emptyLabel="No disposal reasons recorded yet" />
+          </div>
+          <div>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-400">Waste-generating hazard categories</h3>
+            <BarList data={data.wasteHazards} emptyLabel="No disposed hazard-tagged records yet" />
+          </div>
+        </div>
+      </section>
+    </>
+  )
+}

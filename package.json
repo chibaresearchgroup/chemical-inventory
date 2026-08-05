@@ -1,0 +1,37 @@
+{
+  "name": "chibalab-inventory",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Chemical inventory management for the Chiba Research Group, NTU Singapore",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.110.0",
+    "jsqr": "^1.4.0",
+    "lucide-react": "^0.451.0",
+    "ogl": "^1.0.11",
+    "openchemlib": "^9.24.0",
+    "qrcode": "^1.5.4",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-ocl": "^8.7.2",
+    "react-router-dom": "^6.26.2",
+    "tesseract.js": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/qrcode": "^1.5.5",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.2",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8"
+  }
+}

@@ -1,0 +1,110 @@
+import { useEffect, useRef, useState } from 'react'
+import { Spinner } from './ui'
+
+declare global {
+  interface Window {
+    $3Dmol?: {
+      createViewer: (el: HTMLElement, options?: Record<string, unknown>) => {
+        clear: () => void
+        addModel: (data: string, format: string) => unknown
+        setStyle: (sel: Record<string, unknown>, style: Record<string, unknown>) => void
+        setBackgroundColor: (color: string | number) => void
+        resize: () => void
+        zoomTo: () => void
+        render: () => void
+      }
+    }
+  }
+}
+
+type StyleMode = 'stick' | 'sphere' | 'line'
+
+let loader: Promise<void> | null = null
+
+function load3Dmol() {
+  if (window.$3Dmol) return Promise.resolve()
+  if (!loader) {
+    loader = new Promise((resolve, reject) => {
+      const script = document.createElement('script')
+      script.src = 'https://3dmol.org/build/3Dmol-min.js'
+      script.async = true
+      script.onload = () => resolve()
+      script.onerror = () => reject(new Error('Could not load 3Dmol.js'))
+      document.head.appendChild(script)
+    })
+  }
+  return loader
+}
+
+export function Molecule3DViewer({
+  sdf,
+  data,
+  format = 'sdf',
+  coordinates = '3d',
+  emptyMessage = 'No PubChem 3D coordinates available for this compound.',
+  heightClassName = 'h-[220px]',
+}: {
+  sdf: string | null
+  data?: string | null
+  format?: 'sdf' | 'xyz'
+  coordinates?: '3d' | '2d'
+  emptyMessage?: string
+  heightClassName?: string
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [style, setStyle] = useState<StyleMode>('stick')
+  const [error, setError] = useState<string | null>(null)
+  const [ready, setReady] = useState(() => Boolean(window.$3Dmol))
+  const modelData = data ?? sdf
+
+  useEffect(() => {
+    let live = true
+    setError(null)
+    if (!modelData || !ref.current) return
+    load3Dmol()
+      .then(() => {
+        if (!live || !ref.current || !window.$3Dmol) return
+        ref.current.innerHTML = ''
+        setReady(true)
+        const viewer = window.$3Dmol.createViewer(ref.current, { backgroundColor: 'white' })
+        viewer.clear()
+        viewer.addModel(modelData, format)
+        viewer.setBackgroundColor('white')
+        viewer.setStyle({}, style === 'stick' ? { stick: {} } : style === 'sphere' ? { sphere: { scale: 0.3 }, stick: { radius: 0.08 } } : { line: {} })
+        viewer.resize()
+        viewer.zoomTo()
+        viewer.render()
+      })
+      .catch((err) => live && setError(err instanceof Error ? err.message : 'Could not render 3D structure'))
+    return () => {
+      live = false
+    }
+  }, [format, modelData, style])
+
+  if (!modelData) {
+    return <p className="px-3 text-center text-xs text-ink-400">{emptyMessage}</p>
+  }
+
+  return (
+    <div className="flex h-full w-full flex-col gap-2">
+      <div className="flex justify-end gap-1">
+        {(['stick', 'sphere', 'line'] as StyleMode[]).map((mode) => (
+          <button key={mode} type="button" className={style === mode ? 'btn-primary py-1 text-xs' : 'btn-secondary py-1 text-xs'} onClick={() => setStyle(mode)}>
+            {mode}
+          </button>
+        ))}
+      </div>
+      <div
+        ref={ref}
+        className={`relative w-full overflow-hidden rounded bg-white [&_canvas]:!h-full [&_canvas]:!max-h-full [&_canvas]:!max-w-full [&_canvas]:!w-full ${heightClassName}`}
+      />
+      {error && <p className="text-xs text-rose-500">{error}</p>}
+      {!ready && !error && <div className="flex justify-center"><Spinner className="h-4 w-4 text-ink-300" /></div>}
+      {coordinates === '2d' && !error && (
+        <p className="text-center text-[11px] leading-tight text-ink-400">
+          True PubChem 3D conformer not available; showing 2D coordinates in the viewer.
+        </p>
+      )}
+    </div>
+  )
+}
