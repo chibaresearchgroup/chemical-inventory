@@ -31,7 +31,7 @@ interface ProjectGroup {
   missing: string[]
 }
 
-export default function ProjectMapPage({ workspace = 'experimental' }: { workspace?: 'experimental' | 'computational' }) {
+export default function ProjectMapPage() {
   const { chemicals, loading: inventoryLoading } = useInventory()
   const [assets, setAssets] = useState<ResearchAsset[]>([])
   const [loadingAssets, setLoadingAssets] = useState(true)
@@ -106,31 +106,19 @@ export default function ProjectMapPage({ workspace = 'experimental' }: { workspa
     { projects: 0, chemicals: 0, assets: 0, bytes: 0, gaps: 0 },
   )
 
-  const isComputational = workspace === 'computational'
-
   return (
     <>
       <PageHeader
-        title={isComputational ? 'Computational Project Map' : 'Project Map'}
-        description={
-          isComputational
-            ? 'Shared project bridge: wet-lab chemicals, computational assets, owners, storage pointers, and cleanup gaps.'
-            : 'Wet-lab chemicals, computational assets, owners, and cleanup gaps grouped by project.'
-        }
+        title="Project Map"
+        description="Chemicals, research assets, owners, and cleanup gaps grouped by project."
       />
 
       <div className="mb-4 grid gap-3 md:grid-cols-4">
         <MetricCard icon={<Activity className="h-4 w-4" />} label="Projects" value={totals.projects} />
         <MetricCard icon={<FlaskConical className="h-4 w-4" />} label="Chemicals" value={totals.chemicals} />
-        <MetricCard icon={<Database className="h-4 w-4" />} label="Comp assets" value={totals.assets} />
+        <MetricCard icon={<Database className="h-4 w-4" />} label="Research assets" value={totals.assets} />
         <MetricCard icon={<Server className="h-4 w-4" />} label="Tracked storage" value={totals.bytes ? formatBytes(totals.bytes) : 'Unknown'} tone={totals.gaps ? 'warning' : 'default'} />
       </div>
-
-      {isComputational && (
-        <div className="mb-4 rounded-lg border border-pearl-200 bg-pearl-50 px-4 py-3 text-sm text-pearl-900 dark:border-pearl-500/25 dark:bg-pearl-500/10 dark:text-pearl-100">
-          This map is intentionally collaborative. It shows project-level links across experimental and computational work; detailed computational pages remain member-scoped.
-        </div>
-      )}
 
       <div className="mb-4 max-w-xl">
         <SearchInput value={q} onChange={setQ} placeholder="Search projects, people, chemicals, or assets..." />
@@ -178,7 +166,7 @@ export default function ProjectMapPage({ workspace = 'experimental' }: { workspa
                   title: chemical.name,
                   detail: [chemical.code, chemical.location, chemical.owner].filter(Boolean).join(' - '),
                 }))} />
-                <ListBlock title="Computational assets" empty="No assets linked" rows={project.assets.slice(0, 6).map((asset) => ({
+                <ListBlock title="Research assets" empty="No assets linked" rows={project.assets.slice(0, 6).map((asset) => ({
                   title: asset.title,
                   detail: [asset.type, asset.software, asset.status].filter(Boolean).join(' - '),
                 }))} />

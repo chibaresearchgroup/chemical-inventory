@@ -283,7 +283,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
   return (
     <div className="flex h-full">
       {/* Desktop sidebar */}
-      <aside className="app-chrome no-print hidden w-72 shrink-0 flex-col border-r border-ink-200 lg:flex dark:border-ink-800">
+      <aside className="app-chrome no-print hidden w-60 shrink-0 flex-col overflow-y-auto border-r border-ink-200 lg:flex dark:border-ink-800">
         <SidebarContent />
       </aside>
 
