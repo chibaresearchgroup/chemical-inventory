@@ -25,9 +25,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
 
-      - run: npm ci
+      - run: npm ci || (echo "npm ci failed, retrying with npm install" && npm install)
 
       - run: npm run typecheck
 
