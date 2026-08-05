@@ -226,9 +226,9 @@ export default function LoginPage() {
 
           <dl className="mt-10 flex gap-8 border-t border-white/10 pt-6">
             {[
-              ['235', 'containers'],
-              ['16', 'locations'],
-              ['40', 'suppliers'],
+              ['6,006', 'containers'],
+              ['43', 'locations'],
+              ['125', 'suppliers'],
             ].map(([n, l]) => (
               <div key={l}>
                 <dt className="text-xl font-bold text-white">{n}</dt>
