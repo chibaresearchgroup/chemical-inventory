@@ -81,7 +81,7 @@ export default function LoginPage() {
 
   async function verifyCode() {
     setError(null)
-    if (!code.trim()) return setError('Enter the 6-digit code from the email.')
+    if (!code.trim()) return setError('Enter the code from the email.')
     setVerifyingCode(true)
     try {
       await auth.verifyEmailCode(email, code)
@@ -302,7 +302,7 @@ export default function LoginPage() {
                   <MailCheck className="h-4 w-4" /> Check your inbox
                 </div>
                 <p className="mt-1.5 leading-relaxed text-pearl-800 dark:text-pearl-100/80">
-                  We sent a six-digit sign-in code to <strong>{email}</strong>. Enter it below.
+                  We sent a sign-in code to <strong>{email}</strong>. Enter it below.
                   The code expires after an hour.
                 </p>
 
@@ -317,17 +317,17 @@ export default function LoginPage() {
                     htmlFor="email-code"
                     className="block text-xs font-semibold uppercase tracking-wide text-pearl-800 dark:text-pearl-200"
                   >
-                    Six-digit code
+                    Sign-in code
                   </label>
                   <input
                     id="email-code"
                     className="input text-center font-mono text-lg tracking-[0.35em]"
                     inputMode="numeric"
                     autoComplete="one-time-code"
-                    placeholder="123456"
-                    maxLength={6}
+                    placeholder="Enter code"
+                    maxLength={12}
                     value={code}
-                    onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 12))}
                     autoFocus
                   />
                   {error && <ErrorBanner message={error} />}
@@ -369,7 +369,7 @@ export default function LoginPage() {
                 <Field
                   label="Email"
                   required
-                  hint="We’ll email you a six-digit, one-time sign-in code."
+                  hint="We’ll email you a one-time sign-in code."
                 >
                   <div className="relative">
                     <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />

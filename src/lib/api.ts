@@ -340,7 +340,8 @@ export const auth = {
   },
 
   /**
-   * The same email as the magic link also carries a 6-digit code — the
+   * The same email as the magic link also carries a numeric code (length set
+   * by the Supabase project's OTP settings, not fixed by this app) — the
    * fallback for when the link itself doesn't work. That happens more than
    * it should: some institutional email gateways pre-fetch every link in an
    * inbound message to scan it for phishing, which silently burns a
