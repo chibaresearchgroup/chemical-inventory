@@ -102,14 +102,6 @@ function matchMentionedMembers(rows: Array<{ id: string; full_name: string }>, b
   return ids
 }
 
-function nextStableId(rows: Array<{ stable_id: string | null }>): string {
-  const max = rows.reduce((highest, row) => {
-    const n = Number(row.stable_id?.replace(/\D/g, '') || 0)
-    return Number.isFinite(n) ? Math.max(highest, n) : highest
-  }, 0)
-  return `ChibaLab-RA-${String(max + 1).padStart(6, '0')}`
-}
-
 function memberAliases(member: Profile): string[] {
   return [member.id, member.full_name, member.email]
     .map((value) => value?.trim().toLowerCase())
@@ -643,8 +635,13 @@ export const api = {
     const sb = requireSupabase()
     let code = input.code
     if (!code) {
-      const { data: codes } = await sb.from('chemicals').select('code')
-      code = nextCode(((codes ?? []) as Array<{ code: string }>).map((c) => c.code))
+      // Ask the database for the next code rather than fetching every code
+      // client-side to compute it — a plain .select('code') is silently
+      // capped at 1000 rows by PostgREST, which for a lab with more
+      // containers than that can hand back an already-used number.
+      const { data: nextCode, error: nextCodeError } = await sb.rpc('next_chemical_code')
+      if (nextCodeError) fail('Could not allocate a code', nextCodeError)
+      code = nextCode as string
     }
 
     const { data, error } = await sb
@@ -719,8 +716,20 @@ export const api = {
     }
 
     const sb = requireSupabase()
-    const { data: codes } = await sb.from('chemicals').select('code')
-    const taken = ((codes ?? []) as Array<{ code: string }>).map((c) => c.code)
+    // Same 1000-row PostgREST cap as listChemicals() — a plain .select('code')
+    // on a lab with more containers than that silently returns only some of
+    // them, which is exactly what let this generate an already-used code.
+    const { count } = await sb.from('chemicals').select('*', { count: 'exact', head: true })
+    const CODE_PAGE_SIZE = 1000
+    const codeStarts: number[] = []
+    for (let from = 0; from < (count ?? 0); from += CODE_PAGE_SIZE) codeStarts.push(from)
+    const codePages = await Promise.all(
+      codeStarts.map(async (from) => {
+        const { data } = await sb.from('chemicals').select('code').range(from, from + CODE_PAGE_SIZE - 1)
+        return ((data ?? []) as Array<{ code: string }>).map((c) => c.code)
+      }),
+    )
+    const taken = codePages.flat()
 
     const payload = rows.map((r) => {
       const code = r.code || nextCode(taken)
@@ -1126,12 +1135,19 @@ export const api = {
       logLocal(null, 'created', `Added research asset ${row.title}`, actor)
       return row
     }
-    const { data: ids } = await requireSupabase().from('research_assets').select('stable_id')
+    // Ask the database for the next stable_id rather than fetching every
+    // existing one client-side — same 1000-row PostgREST cap as chemical
+    // codes, just far less likely to bite yet given how few research assets
+    // exist so far.
+    const { data: nextStableIdValue, error: nextStableIdError } = await requireSupabase().rpc(
+      'next_research_asset_stable_id',
+    )
+    if (nextStableIdError) fail('Could not allocate an asset ID', nextStableIdError)
     const { data, error } = await requireSupabase()
       .from('research_assets')
       .insert({
         ...input,
-        stable_id: nextStableId((ids ?? []) as Array<{ stable_id: string | null }>),
+        stable_id: nextStableIdValue as string,
         created_by: actor.id,
         created_by_name: actor.full_name,
       })
@@ -1172,7 +1188,7 @@ export const api = {
       ? { ...input, stable_id: stableId, created_by: actor.id, created_by_name: actor.full_name }
       : {
           ...input,
-          stable_id: nextStableId(await sb.from('research_assets').select('stable_id').then(({ data }) => (data ?? []) as Array<{ stable_id: string | null }>)),
+          stable_id: await sb.rpc('next_research_asset_stable_id').then(({ data }) => data as string),
           created_by: actor.id,
           created_by_name: actor.full_name,
         }
