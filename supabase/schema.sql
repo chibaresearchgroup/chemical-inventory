@@ -291,14 +291,12 @@ create table if not exists public.invites (
 
 create index if not exists invites_email_idx on public.invites (lower(email));
 
+-- RLS enabled here, but the policy itself is created further down (see
+-- "invites" under Row Level Security) — it calls public.is_approved() and
+-- public.current_user_role(), which aren't defined until the Helpers section
+-- below. Splitting it this way keeps every policy in one place without
+-- forcing this table's creation to wait for the helpers.
 alter table public.invites enable row level security;
-
-drop policy if exists "admins manage invites" on public.invites;
-create policy "admins manage invites"
-  on public.invites for all
-  to authenticated
-  using (public.is_approved() and public.current_user_role() = 'admin')
-  with check (public.is_approved() and public.current_user_role() = 'admin');
 
 -- ---------------------------------------------------------------------------
 -- lab_locations — shared dropdown additions on top of the built-in lab map
@@ -564,6 +562,14 @@ create policy "signed-in users append activity"
   to authenticated
   with check (public.is_approved() and user_id = (select auth.uid()));
 -- No update/delete policy: the audit trail is append-only by construction.
+
+-- invites ---------------------------------------------------------------
+drop policy if exists "admins manage invites" on public.invites;
+create policy "admins manage invites"
+  on public.invites for all
+  to authenticated
+  using (public.is_approved() and public.current_user_role() = 'admin')
+  with check (public.is_approved() and public.current_user_role() = 'admin');
 
 -- lab_locations -------------------------------------------------------------
 drop policy if exists "lab locations readable by approved users" on public.lab_locations;

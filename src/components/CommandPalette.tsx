@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowRight, Beaker, CornerDownLeft, Search, ShieldCheck } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { useInventory } from '../context/InventoryContext'
-import { COMPUTATIONAL_NAV, NAV } from '../lib/nav'
+import { NAV } from '../lib/nav'
 import type { Chemical } from '../lib/types'
 import { cx, formatSize } from '../lib/utils'
 
@@ -11,10 +11,12 @@ type Entry =
   | { kind: 'page'; key: string; label: string; hint: string; to: string; icon: typeof Search }
   | { kind: 'chemical'; key: string; label: string; hint: string; chemical: Chemical }
 
-const BASE_PAGES: Array<{ to: string; label: string; hint: string; icon: typeof Search }> = [
-  ...NAV.map((n) => ({ to: n.to, label: n.label, hint: 'Experimental', icon: n.icon })),
-  ...COMPUTATIONAL_NAV.map((n) => ({ to: n.to, label: n.label, hint: 'Computational', icon: n.icon })),
-]
+const BASE_PAGES: Array<{ to: string; label: string; hint: string; icon: typeof Search }> = NAV.map((n) => ({
+  to: n.to,
+  label: n.label,
+  hint: 'Page',
+  icon: n.icon,
+}))
 
 function matches(chemical: Chemical, needle: string): boolean {
   return [chemical.name, chemical.code, chemical.cas, chemical.supplier, chemical.location]

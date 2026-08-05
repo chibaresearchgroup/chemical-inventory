@@ -187,9 +187,9 @@ function LinkedResourceCard({ post, chemicals, assets, projects }: { post: FeedP
     const a = assets.find((row) => row.id === post.linked_resource_id)
     if (!a) return null
     return (
-      <Link to="/research-assets" className="mt-2 flex items-center gap-1.5 rounded-lg bg-ink-50 px-2.5 py-1.5 text-xs text-pearl-700 hover:underline dark:bg-ink-950/40 dark:text-pearl-300">
+      <span className="mt-2 flex items-center gap-1.5 rounded-lg bg-ink-50 px-2.5 py-1.5 text-xs text-pearl-700 dark:bg-ink-950/40 dark:text-pearl-300">
         <Database className="h-3.5 w-3.5" /> {a.title}
-      </Link>
+      </span>
     )
   }
   const p = projects.find((row) => row.id === post.linked_resource_id)

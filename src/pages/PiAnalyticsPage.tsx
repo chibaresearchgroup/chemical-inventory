@@ -160,10 +160,7 @@ export default function PiAnalyticsPage() {
 
       <section>
         <div className="mb-2 flex items-center justify-between">
-          <h3 className="text-sm font-bold text-ink-800 dark:text-ink-100">Computational</h3>
-          <Link to="/computational" className="flex items-center gap-1 text-xs font-medium text-pearl-700 hover:underline dark:text-pearl-300">
-            Open Computational <ArrowRight className="h-3 w-3" />
-          </Link>
+          <h3 className="text-sm font-bold text-ink-800 dark:text-ink-100">Research assets</h3>
         </div>
         <div className="card grid grid-cols-2 divide-y divide-ink-100 p-0 sm:grid-cols-3 md:grid-cols-5 sm:divide-x sm:divide-y-0 dark:divide-ink-800">
           <Kpi icon={<Database className="h-4 w-4" />} label="Active" value={compStats.byStatus.get('active') ?? 0} />

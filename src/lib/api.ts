@@ -590,12 +590,40 @@ export const api = {
 
   async listChemicals(): Promise<Chemical[]> {
     if (!IS_CLOUD) return localDb.chemicals()
-    const { data, error } = await requireSupabase()
+    const sb = requireSupabase()
+    // PostgREST caps an unpaginated select at 1000 rows by default — for a
+    // lab with more containers than that, a plain .select('*') silently
+    // truncates the inventory instead of erroring, which is worse than slow.
+    //
+    // Get the real count first, then fire every page in parallel instead of
+    // one after another — for a few thousand rows, sequential paging adds
+    // several seconds of pure network round-trip latency for no reason.
+    // Ties on `name` alone aren't a stable sort boundary across independent
+    // range queries, so `id` breaks ties deterministically (no dropped or
+    // duplicated rows at page edges).
+    const PAGE_SIZE = 1000
+    const { count, error: countError } = await sb
       .from('chemicals')
-      .select('*')
-      .order('name', { ascending: true })
-    if (error) fail('Could not load the inventory', error)
-    return (data ?? []) as Chemical[]
+      .select('*', { count: 'exact', head: true })
+    if (countError) fail('Could not load the inventory', countError)
+
+    const pageStarts: number[] = []
+    for (let from = 0; from < (count ?? 0); from += PAGE_SIZE) pageStarts.push(from)
+    if (pageStarts.length === 0) return []
+
+    const pages = await Promise.all(
+      pageStarts.map(async (from) => {
+        const { data, error } = await sb
+          .from('chemicals')
+          .select('*')
+          .order('name', { ascending: true })
+          .order('id', { ascending: true })
+          .range(from, from + PAGE_SIZE - 1)
+        if (error) fail('Could not load the inventory', error)
+        return (data ?? []) as Chemical[]
+      }),
+    )
+    return pages.flat()
   },
 
   async createChemical(input: ChemicalInput, actor: Profile): Promise<Chemical> {
@@ -699,8 +727,18 @@ export const api = {
       return { ...r, code, registered_by: r.registered_by || actor.full_name, created_by: actor.id }
     })
 
-    const { error } = await sb.from('chemicals').insert(payload)
-    if (error) fail('Import failed', error)
+    // A single insert with thousands of rows risks a request-size or timeout
+    // failure partway through, with no way to tell which rows actually made
+    // it in. Batching keeps each request small and means a failure at batch
+    // N leaves batches 1..N-1 safely committed, not an all-or-nothing gamble.
+    const BATCH_SIZE = 250
+    let imported = 0
+    for (let i = 0; i < payload.length; i += BATCH_SIZE) {
+      const batch = payload.slice(i, i + BATCH_SIZE)
+      const { error } = await sb.from('chemicals').insert(batch)
+      if (error) fail(`Import failed after ${imported} of ${payload.length} rows`, error)
+      imported += batch.length
+    }
     await api.log(null, 'imported', `Imported ${rows.length} containers`, actor)
     return rows.length
   },

@@ -1,10 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
-import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import {
   ChevronDown,
   ChevronsUpDown,
-  Database,
-  FlaskConical,
   LogOut,
   Menu,
   MessageSquare,
@@ -19,40 +17,20 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../context/AuthContext'
 import { MODE, LAB_SUBTITLE } from '../lib/config'
-import { COMPUTATIONAL_NAV, NAV } from '../lib/nav'
+import { NAV } from '../lib/nav'
 import { cx } from '../lib/utils'
 import { AskChibaLab } from './AskChibaLab'
 import { CommandPalette } from './CommandPalette'
 import { NtuBadge, Wordmark } from './Logo'
 import { NotificationBell } from './NotificationBell'
 
-type WorkspaceMode = 'experimental' | 'computational'
 type SidebarWidth = 'compact' | 'comfortable' | 'wide'
 
-const WORKSPACE_STORAGE_KEY = 'pearl.workspace_mode'
 const SIDEBAR_WIDTH_STORAGE_KEY = 'pearl.sidebar_width'
-const SHARED_WORKSPACE_PATHS = new Set(['/analytics', '/activity'])
 const SIDEBAR_WIDTHS: Record<SidebarWidth, string> = {
   compact: 'w-60',
   comfortable: 'w-72',
   wide: 'w-80',
-}
-
-function storedWorkspaceMode(): WorkspaceMode {
-  try {
-    return localStorage.getItem(WORKSPACE_STORAGE_KEY) === 'computational'
-      ? 'computational'
-      : 'experimental'
-  } catch {
-    return 'experimental'
-  }
-}
-
-function workspaceFromPath(pathname: string): WorkspaceMode {
-  if (SHARED_WORKSPACE_PATHS.has(pathname)) return storedWorkspaceMode()
-  return pathname.startsWith('/research-assets') || pathname.startsWith('/computational')
-    ? 'computational'
-    : 'experimental'
 }
 
 function storedSidebarWidth(): SidebarWidth {
@@ -62,63 +40,6 @@ function storedSidebarWidth(): SidebarWidth {
   } catch {
     return 'comfortable'
   }
-}
-
-function WorkspaceSwitch({
-  compact = false,
-  shortLabels = false,
-  onSwitch,
-}: {
-  compact?: boolean
-  shortLabels?: boolean
-  onSwitch?: () => void
-}) {
-  const location = useLocation()
-  const navigate = useNavigate()
-  const mode = workspaceFromPath(location.pathname)
-
-  function setMode(next: WorkspaceMode) {
-    try {
-      localStorage.setItem(WORKSPACE_STORAGE_KEY, next)
-    } catch {
-      /* route still changes */
-    }
-    navigate(next === 'experimental' ? '/' : '/computational')
-    onSwitch?.()
-  }
-
-  return (
-    <div
-      className={cx(
-        'rounded-lg border border-ink-200 bg-ink-50 p-1 dark:border-ink-800 dark:bg-ink-950',
-        compact ? 'flex w-full' : 'grid grid-cols-2',
-      )}
-      aria-label="Inventory workspace"
-    >
-      {[
-        { value: 'experimental' as const, label: shortLabels ? 'Exp' : 'Experimental', icon: FlaskConical },
-        { value: 'computational' as const, label: shortLabels ? 'Comp' : 'Computational', icon: Database },
-      ].map(({ value, label, icon: Icon }) => {
-        const on = mode === value
-        return (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setMode(value)}
-            className={cx(
-              'flex min-w-0 items-center justify-center gap-1.5 rounded-md px-2 py-1.5 text-xs font-semibold transition-colors',
-              on
-                ? 'bg-white text-pearl-800 shadow-sm ring-1 ring-ink-200 dark:bg-ink-800 dark:text-pearl-200 dark:ring-ink-700'
-                : 'text-ink-500 hover:text-ink-800 dark:text-ink-400 dark:hover:text-ink-100',
-            )}
-          >
-            <Icon className="h-3.5 w-3.5 shrink-0" />
-            <span className="truncate">{label}</span>
-          </button>
-        )
-      })}
-    </div>
-  )
 }
 
 function useTheme() {
@@ -290,29 +211,16 @@ function UserMenu() {
   )
 }
 
-function SidebarContent({
-  onNavigate,
-  showWorkspaceSwitch = false,
-}: {
-  onNavigate?: () => void
-  showWorkspaceSwitch?: boolean
-}) {
+function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
   const { isAdmin, isPi } = useAuth()
-  const location = useLocation()
-  const mode = workspaceFromPath(location.pathname)
-  const links = mode === 'computational' ? COMPUTATIONAL_NAV : NAV
 
   return (
     <>
       <div className="space-y-3 px-3 py-4">
         <Wordmark />
-        {showWorkspaceSwitch && <WorkspaceSwitch onSwitch={onNavigate} />}
       </div>
       <nav className="flex-1 space-y-1 px-3">
-        <p className="px-3 text-[10.5px] font-semibold uppercase tracking-[0.14em] text-ink-400">
-          {mode === 'computational' ? 'Computational' : 'Experimental'}
-        </p>
-        {links.map(({ to, label, icon: Icon, end }) => (
+        {NAV.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}
             to={to}
@@ -396,7 +304,6 @@ export function AppShell({ children }: { children?: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
   const [sidebarWidth, setSidebarWidth] = useState<SidebarWidth>(() => storedSidebarWidth())
   const [paletteOpen, setPaletteOpen] = useState(false)
-  const location = useLocation()
   const navigate = useNavigate()
 
   // ⌘K / Ctrl+K opens the command palette from anywhere, even mid-typing —
@@ -462,7 +369,7 @@ export function AppShell({ children }: { children?: ReactNode }) {
             onClick={() => setMobileOpen(false)}
           />
           <aside className="app-chrome relative flex h-full w-72 max-w-[88vw] flex-col shadow-pop animate-slide-in-right">
-            <SidebarContent onNavigate={() => setMobileOpen(false)} showWorkspaceSwitch />
+            <SidebarContent onNavigate={() => setMobileOpen(false)} />
           </aside>
         </div>
       )}
@@ -478,9 +385,6 @@ export function AppShell({ children }: { children?: ReactNode }) {
           </button>
           <div className="lg:hidden">
             <Wordmark compact />
-          </div>
-          <div className="hidden w-[28rem] max-w-[42vw] lg:block">
-            <WorkspaceSwitch compact />
           </div>
           <SidebarWidthControl value={sidebarWidth} onChange={setSidebarWidth} />
           <div className="flex-1" />
