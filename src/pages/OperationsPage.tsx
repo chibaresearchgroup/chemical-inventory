@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Check, ClipboardList, Download, FileWarning, PackageSearch, Plus, Repeat2, ShieldAlert, ShoppingCart, X } from 'lucide-react'
+import { AlertTriangle, Check, ClipboardList, Download, ExternalLink, FileWarning, PackageSearch, Plus, Repeat2, Search, ShieldAlert, ShoppingCart, X } from 'lucide-react'
 import { PageHeader } from '../components/Layout'
 import { Field, Spinner } from '../components/ui'
 import { useAuth } from '../context/AuthContext'
@@ -9,6 +9,7 @@ import { api } from '../lib/api'
 import { HAZARDS, type Chemical, type ChemicalRequest, type ChemicalRequestInput } from '../lib/types'
 import { useLabLocations } from '../lib/useLabLocations'
 import { download, formatDate, formatSize, todayISO, uniqueSorted } from '../lib/utils'
+import * as pubchem from '../lib/pubchem'
 
 const INCOMPATIBLE: Array<[string, string, string]> = [
   ['Flammable', 'Oxidising', 'Fire risk'],
@@ -329,6 +330,24 @@ export default function OperationsPage() {
                 <input className="input" value={requestForm.justification_project ?? ''} onChange={(e) => setRequestForm((f) => ({ ...f, justification_project: e.target.value }))} />
               </Field>
             </div>
+            {requestForm.chemical_name_or_cas.trim() && (
+              <div className="mt-3 flex flex-wrap items-center gap-1.5 rounded-lg border border-ink-200 bg-ink-50 p-2.5 dark:border-ink-800 dark:bg-ink-950/50">
+                <span className="mr-1 flex items-center gap-1 text-xs font-medium text-ink-600 dark:text-ink-300">
+                  <Search className="h-3.5 w-3.5" /> Check suppliers
+                </span>
+                {pubchem.SUPPLIER_SEARCHES.map((supplier) => (
+                  <a
+                    key={supplier.label}
+                    href={pubchem.supplierSearchUrl(supplier.terms, requestForm.chemical_name_or_cas.trim(), null)}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="rounded-full border border-ink-300 bg-white px-2.5 py-1 text-xs font-medium text-ink-700 hover:bg-ink-100 dark:border-ink-700 dark:bg-ink-900 dark:text-ink-200 dark:hover:bg-ink-800"
+                  >
+                    {supplier.label} <ExternalLink className="ml-0.5 inline h-3 w-3 align-text-top opacity-60" />
+                  </a>
+                ))}
+              </div>
+            )}
             <Field label="Notes">
               <textarea className="input min-h-[72px]" value={requestForm.notes ?? ''} onChange={(e) => setRequestForm((f) => ({ ...f, notes: e.target.value }))} />
             </Field>

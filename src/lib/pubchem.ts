@@ -267,12 +267,14 @@ export function sdsSearchUrl(name: string, cas: string | null, supplier: string 
   return `https://www.google.com/search?q=${encodeURIComponent(terms)}`
 }
 
+/** Ordered to match ChibaLab's actual most-used suppliers (see Analytics). */
 export const SUPPLIER_SEARCHES = [
-  { label: 'Sigma', terms: 'Sigma-Aldrich Merck' },
+  { label: 'Sigma-Aldrich', terms: 'Sigma-Aldrich Merck' },
   { label: 'TCI', terms: 'TCI Chemicals' },
+  { label: 'Alfa Aesar', terms: 'Alfa Aesar Thermo Scientific' },
+  { label: 'Fluorochem', terms: 'Fluorochem' },
+  { label: 'BLD Pharm', terms: 'BLD Pharm BLDpharm' },
   { label: 'Fisher', terms: 'Fisher Scientific' },
-  { label: 'Macklin', terms: 'Macklin chemical' },
-  { label: 'Aladdin', terms: 'Aladdin chemical' },
 ] as const
 
 export function supplierSearchUrl(
