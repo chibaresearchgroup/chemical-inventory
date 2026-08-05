@@ -334,7 +334,7 @@ export default function LoginPage() {
                   <button
                     type="submit"
                     className="btn-primary w-full"
-                    disabled={verifyingCode || code.length !== 6}
+                    disabled={verifyingCode || code.trim().length === 0}
                   >
                     {verifyingCode ? <Spinner /> : <KeyRound className="h-4 w-4" />} Continue
                   </button>
